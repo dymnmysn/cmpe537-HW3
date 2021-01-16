@@ -3,31 +3,18 @@
 Created on Sun Jan 15 21:47:29 2021
 
 @author: krgza
-
-###############################################################################################
-        Input: 
-        --Falder path
-            Give path to "folder" variable as shown below 
-            
-            ======> folder = "#####PATH TO IMAGES FOLDER####### /Caltech20"  <========
-            
-            And give subfolder name training/testing.
-            Then run code.
+    
+    Local Binary features script
+    
+    Usage: 
         
-        Outputs:
-            -- {name of image class}_subfoldername.csv
-            
-                hist_airplanes_training.csv
-                            OR
-                hist_airplanes_training.csv
-                
-                Each column of output file represents one image's features.
-                
-###############################################################################################
+    file_path = .... # a string.
+    
+    hist_vec = lbp_hist_calculator(file_path) # returns a vector
+    
 """
 import cv2
 import numpy as np
-from matplotlib import pyplot as plt
 import pandas as pd
 import os 
 from tqdm import tqdm
@@ -37,7 +24,7 @@ def pixel_calculator(img, center, x, y):
     try:
         if img[x][y] >= center:
             new_value = 1
-    except:
+    except IndexError as error:
         pass
     return new_value
 
@@ -59,8 +46,21 @@ def lbp_calculated_pixel(img, x, y):
         val += val_ar[i] * power_val[i]
     return val    
 
-def hist_calculator(file_name):
-    img_bgr = cv2.imread(file_name)
+def lbp_hist_calculator(file_path):
+    """
+
+    Parameters
+    ----------
+    file_path : str
+        Image file path
+
+    Returns
+    -------
+    hist_lbp : Vector (256 by 1)
+        Local binary features' histogram
+
+    """
+    img_bgr = cv2.imread(file_path)
     height, width, channel = img_bgr.shape
     img_gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
     
@@ -72,28 +72,36 @@ def hist_calculator(file_name):
 
     return hist_lbp
 
-if __name__ == '__main__':
-    
-    folder = "#####PATH TO IMAGES FOLDER#######\\Caltech20"
-    subfolder = "training" #testing
+def hist2csv(folder,subfolder):
+    """
+    Parameters
+    ----------
+    folder : str
+        Path to ..\\Caltech20.
+    subfolder : str
+        'training' or 'testing'
+
+    Returns
+    -------
+    None.
+        Create .csv file that contains features
+    """
     folder_path = os.path.join(folder,subfolder)
     for category in (os.listdir(folder_path)): 
         path = os.path.join(folder_path,category)
         histograms = np.zeros((256,1,len(os.listdir(path))))
-        #histograms = []
         histname = "hist_{}_{}.csv".format(category,subfolder)
         running_bar=tqdm(enumerate(os.listdir(path)), total=len(os.listdir(path)))
         for num,img_path in running_bar:
-            #print(img_path)
             img_path = os.path.join(path,img_path)
-            #print(img_path)
-            histograms[:,:,num]=np.array(hist_calculator(img_path))
-            #if num == 10:
-                #break
+            histograms[:,:,num]=np.array(lbp_hist_calculator(img_path))
+
             
-        #running_bar.set_description("Running {}".format(histname))
         histograms = np.squeeze(histograms)
         df = pd.DataFrame(histograms) 
         df.to_csv(histname)
-        #break
+
+
         
+    
+            
