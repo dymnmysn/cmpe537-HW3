@@ -18,7 +18,9 @@ class BagOfWords:
 
     bow.words # <-- The dictionary
     bow.get_doc_vector(some_word) # <-- Document vector of a single word
-    
+
+    @author: <mahmutkaraca95@gmail.com> KaracaSoft
+
     """
 
     def __init__(self):
