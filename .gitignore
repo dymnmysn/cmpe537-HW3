@@ -1,0 +1,9 @@
+# IDE options
+.vscode/
+
+# build artifacts and stuff
+__pycache__/
+.ipynb_checkpoints/
+
+# Development environment and data
+test.py

@@ -18,7 +18,9 @@ class BagOfWords:
 
     bow.words # <-- The dictionary
     bow.get_doc_vector(some_word) # <-- Document vector of a single word
-    
+
+    @author: <mahmutkaraca95@gmail.com> KaracaSoft
+
     """
 
     def __init__(self):
@@ -28,6 +30,8 @@ class BagOfWords:
     
     def add_document(self, doc, words_of_doc):
         for word in words_of_doc:
+            # Invalidate doc vector of the existing word
+            del self.doc_vectors[word]
             self._add_word(word, len(self.docs))
         self.docs.append(doc)
 
