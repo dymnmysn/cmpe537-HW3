@@ -1,3 +1,7 @@
+# The template for this code is taken from
+# https://github.com/gurkandemir/Bag-of-Visual-Words
+# and it is changed and improved to meet our needs.
+
 import argparse
 import cv2
 import numpy as np
@@ -9,6 +13,52 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import accuracy_score
+
+
+from math import copysign, log10
+
+class hu:
+    def HuDescriptor(self, image):
+        im = cv2.resize(image, (50,50))
+        hsv = cv2.cvtColor(im, cv2.COLOR_BGR2HSV)
+        desc = np.zeros((128,1))
+        for i in range (8):
+            for j in range (2):
+                lower_hue = np.array([(30*i), 40, 40])
+                upper_hue = np.array([(30*i + (j+1)*20), 255, 255])
+                mask = cv2.inRange(hsv, lower_hue, upper_hue)
+                moments = cv2.moments(mask)
+                huMoments = cv2.HuMoments(moments)
+                for k in range(0, 7):
+                    huMoments[k] = -1 * copysign(1.0, huMoments[k]) * log10(max(1e-30,abs(huMoments[k])))
+                desc[i*14 + j*7 : i*14 + j*7 + 7] = huMoments
+
+        desc[112:119] = cv2.HuMoments(
+          cv2.moments(cv2.inRange(hsv, np.array([0, 50, 50]), np.array([150, 255, 255]))))
+        desc[119:126] = cv2.HuMoments(
+          cv2.moments(cv2.inRange(hsv, np.array([120, 50, 50]), np.array([255, 255, 255]))))
+        desc = desc.T
+        return desc
+
+    def detectAndCompute(self,image, ignoredparam = None):
+        img = cv2.resize(image, (150, 150))
+        descs = self.HuDescriptor(image)
+        for i in range(3):
+            for j in range(3):
+                desc = self.HuDescriptor(image[i*50:i*50+50,j*50:j*50+50])
+                descs = np.vstack((descs, desc))
+        for i in range(5):
+            for j in range(5):
+                desc = self.HuDescriptor(image[i*30:i*30+30,j*30:j*30+30])
+                descs = np.vstack((descs, desc))
+
+        for i in range(10):
+            for j in range(10):
+                desc = self.HuDescriptor(image[i*15:i*15+15,j*15:j*15+15])
+                descs = np.vstack((descs, desc))
+        kp = 0
+        return kp, descs
+
 
 
 def getFiles(path):
@@ -25,16 +75,14 @@ def getDescriptors(descMethod, img):
 
 
 def readImage(img_path):
-    img = cv2.imread(img_path, 0)
+    #img = cv2.imread(img_path, 0)
+    img = cv2.imread(img_path)
     return cv2.resize(img, (150, 150))
 
 
 def vstackDescriptors(descriptor_list):
-    #print('The shape of descriptor list is ')
     descriptors = np.array(descriptor_list[0])
     for descriptor in descriptor_list[1:]:
-        #print('Descriptor is')
-        #print(descriptor)
         descriptors = np.vstack((descriptors, descriptor))
 
     return descriptors
@@ -45,7 +93,7 @@ def clusterDescriptors(descriptors, no_clusters):
     return kmeans
 
 
-def extractFeatures(kmeans, descriptor_list, image_count, no_clusters):
+def extractFeatures(kmeans, descriptor_list, no_clusters):
     im_features = np.array([np.zeros(no_clusters) for i in range(len(descriptor_list))])
     for i in range(len(descriptor_list)):
         for j in range(len(descriptor_list[i])):
@@ -157,20 +205,24 @@ def findAccuracy(true, predictions):
     print('accuracy score: %0.3f' % accuracy_score(true, predictions))
 
 
-def trainModel(path, no_clusters, kernel, dict):
+def trainModel(path, no_clusters, kernel, dict, descriptor):
     images = getFiles(path)
     print("Train images path detected.")
-    sift = cv2.xfeatures2d.SIFT_create()
+
+    if (descriptor == 'hu'):
+        descMethod = hu()
+    else:
+        descMethod = cv2.xfeatures2d.SIFT_create()
+
     descriptor_list = []
     train_labels = np.array([])
-    image_count = len(images)
 
 
     for img_path in images:
         class_name = os.path.basename(os.path.dirname(img_path))
         class_index = dict[class_name]
         img = readImage(img_path)
-        des = getDescriptors(sift, img)
+        des = getDescriptors(descMethod, img)
         if(des is not None):
             descriptor_list.append(des)
             train_labels = np.append(train_labels, class_index)
@@ -181,7 +233,7 @@ def trainModel(path, no_clusters, kernel, dict):
     kmeans = clusterDescriptors(descriptors, no_clusters)
     print("Descriptors clustered.")
 
-    im_features = extractFeatures(kmeans, descriptor_list, image_count, no_clusters)
+    im_features = extractFeatures(kmeans, descriptor_list, no_clusters)
     print("Images features extracted.")
 
     scale = StandardScaler().fit(im_features)
@@ -198,7 +250,7 @@ def trainModel(path, no_clusters, kernel, dict):
     return kmeans, scale, svm, im_features
 
 
-def testModel(path, kmeans, scale, svm, im_features, no_clusters, kernel, dict):
+def testModel(path, kmeans, scale, svm, im_features, no_clusters, kernel, dict, descriptor):
     test_images = getFiles(path)
     print("Test images path detected.")
 
@@ -206,11 +258,14 @@ def testModel(path, kmeans, scale, svm, im_features, no_clusters, kernel, dict):
     true = []
     descriptor_list = []
 
-    sift = cv2.xfeatures2d.SIFT_create()
+    if (descriptor == 'hu'):
+        descMethod = hu()
+    else:
+        descMethod = cv2.xfeatures2d.SIFT_create()
 
     for img_path in test_images:
         img = readImage(img_path)
-        des = getDescriptors(sift, img)
+        des = getDescriptors(descMethod, img)
 
         if (des is not None):
             count += 1
@@ -218,7 +273,7 @@ def testModel(path, kmeans, scale, svm, im_features, no_clusters, kernel, dict):
             class_name = os.path.basename(os.path.dirname(img_path))
             true.append(class_name)
 
-    test_features = extractFeatures(kmeans, descriptor_list, count, no_clusters)
+    test_features = extractFeatures(kmeans, descriptor_list, no_clusters)
 
     test_features = scale.transform(test_features)
 
@@ -238,11 +293,11 @@ def testModel(path, kmeans, scale, svm, im_features, no_clusters, kernel, dict):
     print("Execution done.")
 
 
-def execute(train_path, test_path, no_clusters, kernel):
+def execute(train_path, test_path, no_clusters, kernel,descriptor):
     d = os.listdir(train_path)
     dict = {d[i]:i for i in range(len(d))}
-    kmeans, scale, svm, im_features = trainModel(train_path, no_clusters, kernel, dict)
-    testModel(test_path, kmeans, scale, svm, im_features, no_clusters, kernel, dict)
+    kmeans, scale, svm, im_features = trainModel(train_path, no_clusters, kernel, dict,descriptor)
+    testModel(test_path, kmeans, scale, svm, im_features, no_clusters, kernel, dict,descriptor)
 
 
 if __name__ == '__main__':
@@ -252,11 +307,15 @@ if __name__ == '__main__':
     parser.add_argument('--train_path', action="store", dest="train_path", required=True)
     parser.add_argument('--test_path', action="store", dest="test_path", required=True)
     parser.add_argument('--no_clusters', action="store", dest="no_clusters", default=50)
+    parser.add_argument('--descriptor_type', action="store", dest="descriptor_type", default="sift")
     parser.add_argument('--kernel_type', action="store", dest="kernel_type", default="linear")
 
     args = vars(parser.parse_args())
     if (not (args['kernel_type'] == "linear" or args['kernel_type'] == "precomputed")):
         print("Kernel type must be either linear or precomputed")
         exit(0)
+    if (not (args['descriptor_type'] == "hu" or args['descriptor_type'] == "sift")):
+        print("Descriptor type must be either hu or sift")
+        exit(0)
 
-    execute(args['train_path'], args['test_path'], int(args['no_clusters']), args['kernel_type'])
+    execute(args['train_path'], args['test_path'], int(args['no_clusters']), args['kernel_type'], args['descriptor_type'])
